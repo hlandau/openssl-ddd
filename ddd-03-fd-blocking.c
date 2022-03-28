@@ -1,7 +1,7 @@
 #include <openssl/ssl.h>
 
 /* 
- * Demo 1: Client — Client Creates FD — Blocking
+ * Demo 3: Client — Client Creates FD — Blocking
  * =============================================
  *
  * This is an example of (part of) an application which uses libssl in a simple,
@@ -128,7 +128,7 @@ int main(int argc, char **argv)
     char buf[2048];
 
     ctx = create_ssl_ctx();
-    if (!ctx) {
+    if (ctx == NULL) {
         fprintf(stderr, "cannot create context\n");
         goto fail;
     }

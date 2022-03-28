@@ -221,13 +221,13 @@ int main(int argc, char **argv)
     SSL_CTX *ctx;
 
     ctx = create_ssl_ctx();
-    if (!ctx) {
+    if (ctx == NULL) {
         fprintf(stderr, "cannot create SSL context\n");
         goto fail;
     }
 
     conn = new_conn(ctx, "www.example.com:443");
-    if (!conn) {
+    if (conn == NULL) {
         fprintf(stderr, "cannot establish connection\n");
         goto fail;
     }
@@ -244,7 +244,7 @@ int main(int argc, char **argv)
             struct pollfd pfd = {0};
             pfd.fd = get_conn_fd(conn);
             pfd.events = get_conn_pending_tx(conn);
-            if (!poll(&pfd, 1, timeout)) {
+            if (poll(&pfd, 1, timeout) == 0) {
                 fprintf(stderr, "tx timeout\n");
                 goto fail;
             }
@@ -263,7 +263,7 @@ int main(int argc, char **argv)
             struct pollfd pfd = {0};
             pfd.fd = get_conn_fd(conn);
             pfd.events = get_conn_pending_rx(conn);
-            if (!poll(&pfd, 1, timeout)) {
+            if (poll(&pfd, 1, timeout) == 0) {
                 fprintf(stderr, "rx timeout\n");
                 goto fail;
             }

@@ -322,7 +322,7 @@ int main(int argc, char **argv)
     SSL_CTX *ctx;
 
     ctx = create_ssl_ctx();
-    if (!ctx) {
+    if (ctx == NULL) {
         fprintf(stderr, "cannot create SSL context\n");
         goto fail;
     }
@@ -357,7 +357,7 @@ int main(int argc, char **argv)
     }
 
     conn = new_conn(ctx, "www.example.com");
-    if (!conn) {
+    if (conn == NULL) {
         fprintf(stderr, "cannot establish connection\n");
         goto fail;
     }

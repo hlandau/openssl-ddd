@@ -128,13 +128,13 @@ int main(int argc, char **argv)
     int l, res = 1;
 
     ctx = create_ssl_ctx();
-    if (!ctx) {
+    if (ctx == NULL) {
         fprintf(stderr, "could not create context\n");
         goto fail;
     }
 
     b = new_conn(ctx, "www.example.com:443");
-    if (!b) {
+    if (b == NULL) {
         fprintf(stderr, "could not create conn\n");
         goto fail;
     }
