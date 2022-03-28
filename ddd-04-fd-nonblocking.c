@@ -14,7 +14,6 @@
  */
 typedef struct app_conn_st {
     SSL *ssl;
-    BIO *ssl_bio;
     int fd;
     int rx_need_tx, tx_need_rx;
 } APP_CONN;
@@ -53,7 +52,6 @@ SSL_CTX *create_ssl_ctx(void)
  */
 APP_CONN *new_conn(SSL_CTX *ctx, int fd, const char *bare_hostname)
 {
-    BIO *ssl_bio;
     APP_CONN *conn;
     SSL *ssl;
 
@@ -87,21 +85,7 @@ APP_CONN *new_conn(SSL_CTX *ctx, int fd, const char *bare_hostname)
         return NULL;
     }
 
-    ssl_bio = BIO_new(BIO_f_ssl());
-    if (ssl_bio == NULL) {
-        SSL_free(ssl);
-        free(conn);
-        return NULL;
-    }
-
-    if (BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE) <= 0) {
-        SSL_free(ssl);
-        BIO_free(ssl_bio);
-        return NULL;
-    }
-
-    conn->fd        = fd;
-    conn->ssl_bio   = ssl_bio;
+    conn->fd = fd;
     return conn;
 }
 
@@ -115,7 +99,9 @@ int tx(APP_CONN *conn, const void *buf, int buf_len)
 {
     int rc, l;
 
-    l = BIO_write(conn->ssl_bio, buf, buf_len);
+    conn->tx_need_rx = 0;
+
+    l = SSL_write(conn->ssl, buf, buf_len);
     if (l <= 0) {
         rc = SSL_get_error(conn->ssl, l);
         switch (rc) {
@@ -127,8 +113,6 @@ int tx(APP_CONN *conn, const void *buf, int buf_len)
             default:
                 return -1;
         }
-    } else {
-        conn->tx_need_rx = 0;
     }
 
     return l;
@@ -144,7 +128,9 @@ int rx(APP_CONN *conn, void *buf, int buf_len)
 {
     int rc, l;
 
-    l = BIO_read(conn->ssl_bio, buf, buf_len);
+    conn->rx_need_tx = 0;
+
+    l = SSL_read(conn->ssl, buf, buf_len);
     if (l <= 0) {
         rc = SSL_get_error(conn->ssl, l);
         switch (rc) {
@@ -155,8 +141,6 @@ int rx(APP_CONN *conn, void *buf, int buf_len)
             default:
                 return -1;
         }
-    } else {
-        conn->rx_need_tx = 0;
     }
 
     return l;
@@ -211,7 +195,7 @@ int get_conn_pending_rx(APP_CONN *conn)
  */
 void teardown(APP_CONN *conn)
 {
-    BIO_free_all(conn->ssl_bio);
+    SSL_free(conn->ssl);
     free(conn);
 }
 

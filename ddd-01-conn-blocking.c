@@ -44,51 +44,36 @@ SSL_CTX *create_ssl_ctx(void)
  */
 BIO *new_conn(SSL_CTX *ctx, const char *hostname)
 {
-    BIO *out, *ssl_bio, *transport_bio;
+    BIO *out;
+    SSL *ssl = NULL;
     const char *bare_hostname;
-    SSL *ssl;
 
-    ssl = SSL_new(ctx);
-    if (ssl == NULL)
+    out = BIO_new_ssl_connect(ctx);
+    if (out == NULL)
         return NULL;
 
-    SSL_set_connect_state(ssl); /* cannot fail */
-
-    ssl_bio = BIO_new(BIO_f_ssl());
-    if (ssl_bio == NULL) {
-        SSL_free(ssl);
+    if (BIO_get_ssl(out, &ssl) == 0) {
+        BIO_free_all(out);
         return NULL;
     }
 
-    if (BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE) <= 0) {
-        BIO_free_all(ssl_bio);
-        SSL_free(ssl);
-        return NULL;
-    }
-
-    transport_bio = BIO_new_connect(hostname);
-    if (transport_bio == NULL) {
-        BIO_free_all(ssl_bio); /* frees ssl */
+    if (BIO_set_conn_hostname(out, hostname) == 0) {
+        BIO_free_all(out);
         return NULL;
     }
 
     /* Returns the parsed hostname extracted from the hostname:port string. */
-    bare_hostname = BIO_get_conn_hostname(transport_bio);
+    bare_hostname = BIO_get_conn_hostname(out);
     if (bare_hostname == NULL) {
-        BIO_free_all(transport_bio);
-        BIO_free_all(ssl_bio); /* frees ssl */
+        BIO_free_all(out);
         return NULL;
     }
 
     /* Tell the SSL object the hostname to check certificates against. */
     if (SSL_set1_host(ssl, bare_hostname) <= 0) {
-        BIO_free_all(transport_bio);
-        BIO_free_all(ssl_bio); /* frees ssl */
+        BIO_free_all(out);
         return NULL;
     }
-
-    /* Add the SSL filter BIO to the BIO chain. */
-    out = BIO_push(ssl_bio, transport_bio);
 
     return out;
 }

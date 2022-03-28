@@ -18,7 +18,7 @@
  */
 typedef struct app_conn_st {
     SSL *ssl;
-    BIO *ssl_bio, *transport_bio;
+    BIO *ssl_bio;
     int rx_need_tx, tx_need_rx;
 } APP_CONN;
 
@@ -57,68 +57,50 @@ SSL_CTX *create_ssl_ctx(void)
 APP_CONN *new_conn(SSL_CTX *ctx, const char *hostname)
 {
     APP_CONN *conn;
-    BIO *ssl_bio, *transport_bio;
-    SSL *ssl;
+    BIO *out;
+    SSL *ssl = NULL;
     const char *bare_hostname;
 
     conn = calloc(1, sizeof(APP_CONN));
     if (conn == NULL)
         return NULL;
 
-    ssl = conn->ssl = SSL_new(ctx);
-    if (ssl == NULL) {
+    out = BIO_new_ssl_connect(ctx);
+    if (out == NULL) {
         free(conn);
         return NULL;
     }
 
-    SSL_set_connect_state(ssl); /* cannot fail */
-
-    ssl_bio = BIO_new(BIO_f_ssl());
-    if (ssl_bio == NULL) {
-        SSL_free(ssl);
-        free(conn);
+    if (BIO_get_ssl(out, &ssl) == 0) {
+        BIO_free_all(out);
         return NULL;
     }
 
-    if (BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE) <= 0) {
-        BIO_free_all(ssl_bio);
-        SSL_free(ssl);
-        free(conn);
-        return NULL;
-    }
-
-    transport_bio = BIO_new_connect(hostname);
-    if (transport_bio == NULL) {
-        BIO_free_all(ssl_bio); /* frees ssl */
+    if (BIO_set_conn_hostname(out, hostname) == 0) {
+        BIO_free_all(out);
         free(conn);
         return NULL;
     }
 
     /* Returns the parsed hostname extracted from the hostname:port string. */
-    bare_hostname = BIO_get_conn_hostname(transport_bio);
+    bare_hostname = BIO_get_conn_hostname(out);
     if (bare_hostname == NULL) {
-        BIO_free_all(transport_bio);
-        BIO_free_all(ssl_bio); /* frees ssl */
+        BIO_free_all(out);
         free(conn);
         return NULL;
     }
 
     /* Tell the SSL object the hostname to check certificates against. */
     if (SSL_set1_host(ssl, bare_hostname) <= 0) {
-        BIO_free_all(transport_bio);
-        BIO_free_all(ssl_bio); /* frees ssl */
+        BIO_free_all(out);
         free(conn);
         return NULL;
     }
 
     /* Make the BIO nonblocking. */
-    BIO_set_nbio(transport_bio, 1);
+    BIO_set_nbio(out, 1);
 
-    /* Add the SSL filter BIO to the BIO chain. */
-    ssl_bio = BIO_push(ssl_bio, transport_bio);
-
-    conn->ssl_bio       = ssl_bio;
-    conn->transport_bio = transport_bio;
+    conn->ssl_bio = out;
     return conn;
 }
 
@@ -132,20 +114,16 @@ int tx(APP_CONN *conn, const void *buf, int buf_len)
 {
     int rc, l;
 
+    conn->tx_need_rx = 0;
+
     l = BIO_write(conn->ssl_bio, buf, buf_len);
     if (l <= 0) {
-        rc = SSL_get_error(conn->ssl, l);
-        switch (rc) {
-            case SSL_ERROR_WANT_READ:
-                conn->tx_need_rx = 1;
-            case SSL_ERROR_WANT_CONNECT:
-            case SSL_ERROR_WANT_WRITE:
-                return -2;
-            default:
-                return -1;
+        if (BIO_should_retry(conn->ssl_bio)) {
+            conn->tx_need_rx = BIO_should_read(conn->ssl_bio);
+            return -2;
+        } else {
+            return -1;
         }
-    } else {
-        conn->tx_need_rx = 0;
     }
 
     return l;
@@ -161,19 +139,16 @@ int rx(APP_CONN *conn, void *buf, int buf_len)
 {
     int rc, l;
 
+    conn->rx_need_tx = 0;
+
     l = BIO_read(conn->ssl_bio, buf, buf_len);
     if (l <= 0) {
-        rc = SSL_get_error(conn->ssl, l);
-        switch (rc) {
-            case SSL_ERROR_WANT_WRITE:
-                conn->rx_need_tx = 1;
-            case SSL_ERROR_WANT_READ:
-                return -2;
-            default:
-                return -1;
+        if (BIO_should_retry(conn->ssl_bio)) {
+            conn->rx_need_tx = BIO_should_write(conn->ssl_bio);
+            return -2;
+        } else {
+            return -1;
         }
-    } else {
-        conn->rx_need_tx = 0;
     }
 
     return l;
@@ -185,7 +160,7 @@ int rx(APP_CONN *conn, void *buf, int buf_len)
  */
 int get_conn_fd(APP_CONN *conn)
 {
-    return BIO_get_fd(conn->transport_bio, NULL);
+    return BIO_get_fd(conn->ssl_bio, NULL);
 }
 
 /*

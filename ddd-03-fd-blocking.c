@@ -43,9 +43,8 @@ SSL_CTX *create_ssl_ctx(void)
  *
  * hostname is a string like "example.com" used for certificate validation.
  */
-BIO *new_conn(SSL_CTX *ctx, int fd, const char *bare_hostname)
+SSL *new_conn(SSL_CTX *ctx, int fd, const char *bare_hostname)
 {
-    BIO *out;
     SSL *ssl;
 
     ssl = SSL_new(ctx);
@@ -69,46 +68,34 @@ BIO *new_conn(SSL_CTX *ctx, int fd, const char *bare_hostname)
         return NULL;
     }
 
-    out = BIO_new(BIO_f_ssl());
-    if (out == NULL) {
-        SSL_free(ssl);
-        return NULL;
-    }
-
-    if (BIO_set_ssl(out, ssl, BIO_CLOSE) <= 0) {
-        SSL_free(ssl);
-        BIO_free(out);
-        return NULL;
-    }
-
-    return out;
+    return ssl;
 }
 
 /*
  * The application wants to send some block of data to the peer.
  * This is a blocking call.
  */
-int tx(BIO *bio, const void *buf, int buf_len)
+int tx(SSL *ssl, const void *buf, int buf_len)
 {
-    return BIO_write(bio, buf, buf_len);
+    return SSL_write(ssl, buf, buf_len);
 }
 
 /*
  * The application wants to receive some block of data from
  * the peer. This is a blocking call.
  */
-int rx(BIO *bio, void *buf, int buf_len)
+int rx(SSL *ssl, void *buf, int buf_len)
 {
-    return BIO_read(bio, buf, buf_len);
+    return SSL_read(ssl, buf, buf_len);
 }
 
 /*
  * The application wants to close the connection and free bookkeeping
  * structures.
  */
-void teardown(BIO *bio)
+void teardown(SSL *ssl)
 {
-    BIO_free_all(bio);
+    SSL_free(ssl);
 }
 
 /*
@@ -136,7 +123,7 @@ int main(int argc, char **argv)
     int rc, fd = -1, l, res = 1;
     const char msg[] = "GET / HTTP/1.0\r\nHost: www.example.com\r\n\r\n";
     struct addrinfo hints = {0}, *result = NULL;
-    BIO *b = NULL;
+    SSL *ssl = NULL;
     SSL_CTX *ctx;
     char buf[2048];
 
@@ -169,19 +156,19 @@ int main(int argc, char **argv)
         goto fail;
     }
 
-    b = new_conn(ctx, fd, "www.example.com");
-    if (!b) {
+    ssl = new_conn(ctx, fd, "www.example.com");
+    if (ssl == NULL) {
         fprintf(stderr, "cannot create connection\n");
         goto fail;
     }
 
-    if (tx(b, msg, sizeof(msg)-1) < sizeof(msg)-1) {
+    if (tx(ssl, msg, sizeof(msg)-1) < sizeof(msg)-1) {
         fprintf(stderr, "tx error\n");
         goto fail;
     }
 
     for (;;) {
-        l = rx(b, buf, sizeof(buf));
+        l = rx(ssl, buf, sizeof(buf));
         if (l <= 0)
             break;
         fwrite(buf, 1, l, stdout);
@@ -189,8 +176,8 @@ int main(int argc, char **argv)
 
     res = 0;
 fail:
-    if (b != NULL)
-        teardown(b);
+    if (ssl != NULL)
+        teardown(ssl);
     if (ctx != NULL)
         teardown_ctx(ctx);
     if (fd >= 0)
