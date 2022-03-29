@@ -32,6 +32,8 @@ the applications:
 | curl             | A |      AOSF  |
 | Asterisk         | A |      AOSF  |
 | Asterisk (DTLS)  | A |      BIOm/x |
+| pgbouncer        | A |      AOSF, BIOc  |
+| Fossil           | S |      BIOc  |
 
 * Blk: Whether the application uses blocking or non-blocking I/O.
   * S: Blocking
@@ -42,21 +44,19 @@ the applications:
   * BIOs: Application creates a socket/FD BIO and calls SSL_set_bio. Application created the connection.
   * BIOx: Application creates a BIO with a custom BIO method and calls SSL_set_bio.
   * BIOm: Application creates a memory BIO and does its own pumping to/from actual socket, treating libssl as a pure state machine which does no I/O itself.
-  * BIOc: Application uses BIO_s_connect() and leaves connection establishment to OpenSSL.
-
-Use of BIO_s_connect, or similar measures which leave TCP connection
-establishment to OpenSSL, was found to be nonexistent in major FOSS projects
-consuming OpenSSL.
+  * BIOc: Application uses BIO_s_connect-based methods such as BIO_new_ssl_connect and leaves connection establishment to OpenSSL.
 
 ## Demos
 
 The demos found in this repository are:
 
-* [ddd-01-conn-blocking](ddd-01-conn-blocking.c), a `BIO_s_connect`-based blocking example demonstrating exemplary OpenSSL API usage
-* [ddd-02-conn-nonblocking](ddd-02-conn-nonblocking.c), a `BIO_s_connect`-based nonblocking example demonstrating exemplary OpenSSL API usage
-* [ddd-03-fd-blocking](ddd-03-fd-blocking.c), a `SSL_set_fd`-based blocking example demonstrating real-world OpenSSL API usage
-* [ddd-04-fd-nonblocking](ddd-04-fd-nonblocking.c), a `SSL_set_fd`-based non-blocking example demonstrating real-world OpenSSL API usage
-* [ddd-05-mem-nonblocking](ddd-05-mem-nonblocking.c), a non-blocking example based on use of a memory buffer to feed OpenSSL encrypted data
+|                 | Type  | Description |
+|-----------------|-------|-------------|
+| [ddd-01-conn-blocking](ddd-01-conn-blocking.c) | S-BIOc | A `BIO_s_connect`-based blocking example demonstrating exemplary OpenSSL API usage |
+| [ddd-02-conn-nonblocking](ddd-02-conn-nonblocking.c) | A-BIOc | A `BIO_s_connect`-based nonblocking example demonstrating exemplary OpenSSL API usage |
+| [ddd-03-fd-blocking](ddd-03-fd-blocking.c) | S-AOSF | A `SSL_set_fd`-based blocking example demonstrating real-world OpenSSL API usage (corresponding to S-AOSF applications above) |
+| [ddd-04-fd-nonblocking](ddd-04-fd-nonblocking.c) | A-AOSF | A `SSL_set_fd`-based non-blocking example demonstrating real-world OpenSSL API usage (corresponding to A-AOSF applications above) |
+| [ddd-05-mem-nonblocking](ddd-05-mem-nonblocking.c) | A-BIOm | A non-blocking example based on use of a memory buffer to feed OpenSSL encrypted data (corresponding to A-BIOm applications above) |
 
 ## Discussion
 
